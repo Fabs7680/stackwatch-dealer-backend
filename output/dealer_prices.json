@@ -1,0 +1,101 @@
+{
+  "updated_at": "2026-04-03T03:33:59.751217+00:00",
+  "dealers": {
+    "perthMint": {
+      "dealerKey": "perthMint",
+      "sourceUrl": "https://www.perthmint.com/invest/information-for-investors/metal-prices/",
+      "status": "ok",
+      "lastSuccessAt": "2026-04-03T03:32:56.372798+00:00",
+      "metals": {
+        "Gold": {
+          "buy": 6530.71,
+          "sell": 7081.53
+        },
+        "Silver": {
+          "buy": null,
+          "sell": null
+        },
+        "Platinum": {
+          "buy": 2604.08,
+          "sell": 3151.21
+        },
+        "Palladium": {
+          "buy": null,
+          "sell": null
+        }
+      }
+    },
+    "abcBullion": {
+      "dealerKey": "abcBullion",
+      "sourceUrl": "https://www.abcbullion.com.au/pricing",
+      "status": "ok",
+      "lastSuccessAt": "2026-04-03T03:33:22.344118+00:00",
+      "metals": {
+        "Gold": {
+          "buy": null,
+          "sell": 6787.39
+        },
+        "Silver": {
+          "buy": null,
+          "sell": 108.85
+        },
+        "Platinum": {
+          "buy": null,
+          "sell": 2943.78
+        },
+        "Palladium": {
+          "buy": null,
+          "sell": 2336.35
+        }
+      }
+    },
+    "bullionNow": {
+      "dealerKey": "bullionNow",
+      "sourceUrl": "https://bullionnow.com.au/",
+      "status": "stale_after_failure",
+      "lastSuccessAt": "2026-04-03T03:26:58.465758+00:00",
+      "metals": {
+        "Gold": {
+          "buy": null,
+          "sell": 1136.0
+        },
+        "Silver": {
+          "buy": null,
+          "sell": 120.18
+        },
+        "Platinum": {
+          "buy": null,
+          "sell": null
+        },
+        "Palladium": {
+          "buy": null,
+          "sell": null
+        }
+      }
+    },
+    "pbx": {
+      "dealerKey": "pbx",
+      "sourceUrl": "https://www.perthbullion.com.au/shop/",
+      "status": "stale_after_failure",
+      "lastSuccessAt": "2026-04-03T03:27:39.945375+00:00",
+      "metals": {
+        "Gold": {
+          "buy": null,
+          "sell": 6766.76
+        },
+        "Silver": {
+          "buy": null,
+          "sell": 105.68
+        },
+        "Platinum": {
+          "buy": null,
+          "sell": 2890.87
+        },
+        "Palladium": {
+          "buy": null,
+          "sell": null
+        }
+      }
+    }
+  }
+}
