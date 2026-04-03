@@ -31,10 +31,6 @@ class BullionNowSource(DealerSourceBase):
         self._write_debug_file("bullionnow_home_rendered.txt", sell_text)
 
         gold_sell = self._extract_home_sell_price(sell_text, "Gold")
-        if gold_sell is None:
-            gold_sell = self._extract_product_price(
-                "https://bullionnow.com.au/shop/perth-mint-gold-minted-bar-5g/"
-            )
 
         silver_sell = self._extract_product_price(
             "https://bullionnow.com.au/shop/2026-perth-mint-silver-kangaroo-coin-1oz/"
@@ -149,14 +145,6 @@ class BullionNowSource(DealerSourceBase):
                 ),
                 re.compile(
                     r"Gold Cast Bar 1oz.*?Our price:\s*\$\s*([0-9,]+(?:\.[0-9]+)?)",
-                    re.IGNORECASE,
-                ),
-                re.compile(
-                    r"Perth Mint Gold Minted Bar 5g.*?Our price:\s*\$\s*([0-9,]+(?:\.[0-9]+)?)",
-                    re.IGNORECASE,
-                ),
-                re.compile(
-                    r"Gold Minted Bar 5g.*?Our price:\s*\$\s*([0-9,]+(?:\.[0-9]+)?)",
                     re.IGNORECASE,
                 ),
             ]
