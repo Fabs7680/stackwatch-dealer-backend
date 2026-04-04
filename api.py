@@ -115,33 +115,12 @@ def _fetch_usd_aud() -> float:
 
 
 def _fetch_metals_fluctuation_pct(symbols: str) -> dict[str, float]:
-    if not METALS_API_KEY:
-        return {}
-
-    end_date = datetime.now(timezone.utc) - timedelta(days=1)
-    start_date = end_date - timedelta(days=1)
-
-    url = (
-        "https://metals-api.com/api/fluctuation"
-        f"?access_key={METALS_API_KEY}"
-        "&base=USD"
-        f"&start_date={start_date.date().isoformat()}"
-        f"&end_date={end_date.date().isoformat()}"
-        f"&symbols={symbols}"
-    )
-
-    data = _http_get_json(url)
-    rates = data.get("rates") or {}
-
-    out: dict[str, float] = {}
-    for symbol in ["XAU", "XAG", "XPT", "XPD"]:
-        symbol_data = rates.get(symbol) or {}
-        value = symbol_data.get("change_pct")
-        if isinstance(value, (int, float)):
-          out[symbol] = float(value)
-        else:
-          out[symbol] = 0.0
-    return out
+    return {
+        "XAU": 0.0,
+        "XAG": 0.0,
+        "XPT": 0.0,
+        "XPD": 0.0,
+    }
 
 
 def _build_metals_payload() -> dict[str, Any]:
