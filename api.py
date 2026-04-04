@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import atexit
+import json
 import logging
 import os
 import signal
 import threading
 import time
-from datetime import datetime, timezone
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import Flask, jsonify, make_response, request
@@ -52,9 +55,10 @@ PORT = _env_int("DEALER_API_PORT", 8000)
 ENABLE_CORS = _env_bool("DEALER_API_ENABLE_CORS", True)
 STARTUP_COLLECT = _env_bool("DEALER_API_STARTUP_COLLECT", True)
 BACKGROUND_REFRESH = _env_bool("DEALER_API_BACKGROUND_REFRESH", True)
-REFRESH_INTERVAL_SECONDS = max(60, _env_int("DEALER_API_REFRESH_INTERVAL_SECONDS", 300))
+REFRESH_INTERVAL_SECONDS = max(60, _env_int("DEALER_API_REFRESH_INTERVAL_SECONDS", 43200))
 REQUEST_REFRESH_TOKEN = os.getenv("DEALER_API_REFRESH_TOKEN", "").strip()
 CORS_ORIGINS = os.getenv("DEALER_API_CORS_ORIGINS", "*").strip()
+METALS_API_KEY = os.getenv("METALS_API_KEY", "").strip()
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -79,9 +83,129 @@ last_refresh_started_at: str | None = None
 last_refresh_completed_at: str | None = None
 last_refresh_error: str | None = None
 
+metals_cache: dict[str, Any] | None = None
+metals_updated_at: str | None = None
+metals_error: str | None = None
+
 
 def _safe_load_snapshot():
     return load_snapshot()
+
+
+def _http_get_json(url: str) -> dict[str, Any]:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "StackWatch-Dealer-Backend/1.0",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=12) as response:
+        raw = response.read().decode("utf-8")
+        return json.loads(raw)
+
+
+def _fetch_usd_aud() -> float:
+    data = _http_get_json("https://open.er-api.com/v6/latest/USD")
+    rates = data.get("rates") or {}
+    aud = rates.get("AUD")
+    if isinstance(aud, (int, float)) and aud > 0:
+        return float(aud)
+    raise RuntimeError("USD/AUD rate unavailable")
+
+
+def _fetch_metals_fluctuation_pct(symbols: str) -> dict[str, float]:
+    if not METALS_API_KEY:
+        return {}
+
+    end_date = datetime.now(timezone.utc) - timedelta(days=1)
+    start_date = end_date - timedelta(days=1)
+
+    url = (
+        "https://metals-api.com/api/fluctuation"
+        f"?access_key={METALS_API_KEY}"
+        "&base=USD"
+        f"&start_date={start_date.date().isoformat()}"
+        f"&end_date={end_date.date().isoformat()}"
+        f"&symbols={symbols}"
+    )
+
+    data = _http_get_json(url)
+    rates = data.get("rates") or {}
+
+    out: dict[str, float] = {}
+    for symbol in ["XAU", "XAG", "XPT", "XPD"]:
+        symbol_data = rates.get(symbol) or {}
+        value = symbol_data.get("change_pct")
+        if isinstance(value, (int, float)):
+          out[symbol] = float(value)
+        else:
+          out[symbol] = 0.0
+    return out
+
+
+def _build_metals_payload() -> dict[str, Any]:
+    if not METALS_API_KEY:
+        raise RuntimeError("METALS_API_KEY is not configured")
+
+    latest_url = (
+        "https://metals-api.com/api/latest"
+        f"?access_key={METALS_API_KEY}"
+        "&base=USD"
+        "&symbols=XAU,XAG,XPT,XPD"
+    )
+
+    latest = _http_get_json(latest_url)
+    rates = latest.get("rates") or {}
+
+    xau = float(rates.get("XAU") or 0.0)
+    xag = float(rates.get("XAG") or 0.0)
+    xpt = float(rates.get("XPT") or 0.0)
+    xpd = float(rates.get("XPD") or 0.0)
+
+    if xau <= 0 or xag <= 0:
+        raise RuntimeError("Metals API returned invalid XAU/XAG rates")
+
+    usd_aud = _fetch_usd_aud()
+    change_map = _fetch_metals_fluctuation_pct("XAU,XAG,XPT,XPD")
+
+    def q(price: float, change: float) -> dict[str, float]:
+        return {
+            "price": price,
+            "change24hPct": change,
+        }
+
+    payload: dict[str, Any] = {
+        "gold": q((1.0 / xau) * usd_aud, change_map.get("XAU", 0.0)),
+        "silver": q((1.0 / xag) * usd_aud, change_map.get("XAG", 0.0)),
+        "fetchedAt": _utc_now_iso(),
+        "source": "metals-api-backend-cache",
+    }
+
+    if xpt > 0:
+        payload["platinum"] = q((1.0 / xpt) * usd_aud, change_map.get("XPT", 0.0))
+    if xpd > 0:
+        payload["palladium"] = q((1.0 / xpd) * usd_aud, change_map.get("XPD", 0.0))
+
+    return payload
+
+
+def _refresh_metals_cache(reason: str) -> None:
+    global metals_cache, metals_updated_at, metals_error
+
+    logger.info("Refreshing metals cache. reason=%s", reason)
+
+    try:
+        payload = _build_metals_payload()
+        metals_cache = payload
+        metals_updated_at = payload.get("fetchedAt")
+        metals_error = None
+        logger.info("Metals cache refreshed. reason=%s fetched_at=%s", reason, metals_updated_at)
+    except Exception as exc:
+        metals_error = str(exc)
+        logger.exception("Metals cache refresh failed. reason=%s error=%s", reason, exc)
+        if metals_cache is None:
+            raise
 
 
 def _snapshot_age_seconds(snapshot: Any) -> float | None:
@@ -122,16 +246,24 @@ def _ensure_snapshot_exists() -> None:
         dealers = getattr(snapshot, "dealers", None)
         if dealers:
             logger.info("Existing snapshot found on startup.")
-            return
+        else:
+            if STARTUP_COLLECT:
+                try:
+                    _run_collect("startup")
+                except Exception as exc:
+                    logger.warning("Initial collect failed: %s", exc)
     except Exception as exc:
         logger.warning("Snapshot load failed during startup check: %s", exc)
+        if STARTUP_COLLECT:
+            try:
+                _run_collect("startup")
+            except Exception as inner_exc:
+                logger.warning("Initial collect failed: %s", inner_exc)
 
-    if STARTUP_COLLECT:
-        try:
-            _run_collect("startup")
-        except Exception as exc:
-            logger.warning("Initial collect failed: %s", exc)
-
+    try:
+        _refresh_metals_cache("startup")
+    except Exception as exc:
+        logger.warning("Initial metals refresh failed: %s", exc)
 
 def _background_refresh_loop() -> None:
     logger.info(
@@ -144,7 +276,13 @@ def _background_refresh_loop() -> None:
             _run_collect("background")
         except Exception:
             # already logged in _run_collect
-            continue
+            pass
+
+        try:
+            _refresh_metals_cache("background")
+        except Exception:
+            # already logged in _refresh_metals_cache
+            pass
 
     logger.info("Background refresh loop stopped.")
 
@@ -259,9 +397,13 @@ def prices():
     try:
         snapshot = _safe_load_snapshot()
         payload = snapshot.to_dict()
+        payload["spot"] = metals_cache
+        payload["spot_updated_at"] = metals_updated_at
+        payload["spot_error"] = metals_error
 
         response = make_response(jsonify(payload), 200)
         response.headers["X-Snapshot-Updated-At"] = str(payload.get("updated_at", ""))
+        response.headers["X-Spot-Updated-At"] = str(metals_updated_at or "")
         return response
     except Exception as exc:
         logger.exception("Failed to load prices snapshot: %s", exc)
@@ -274,11 +416,12 @@ def prices():
                     "last_refresh_started_at": last_refresh_started_at,
                     "last_refresh_completed_at": last_refresh_completed_at,
                     "last_refresh_error": last_refresh_error,
+                    "spot_updated_at": metals_updated_at,
+                    "spot_error": metals_error,
                 }
             ),
             503,
         )
-
 
 @app.post("/refresh")
 def refresh():
@@ -298,7 +441,16 @@ def refresh():
 
     try:
         snapshot = _run_collect("manual_refresh")
-        return jsonify(snapshot.to_dict())
+        try:
+            _refresh_metals_cache("manual_refresh")
+        except Exception:
+            pass
+
+        payload = snapshot.to_dict()
+        payload["spot"] = metals_cache
+        payload["spot_updated_at"] = metals_updated_at
+        payload["spot_error"] = metals_error
+        return jsonify(payload)
     except Exception as exc:
         return (
             jsonify(
@@ -309,11 +461,12 @@ def refresh():
                     "last_refresh_started_at": last_refresh_started_at,
                     "last_refresh_completed_at": last_refresh_completed_at,
                     "last_refresh_error": last_refresh_error,
+                    "spot_updated_at": metals_updated_at,
+                    "spot_error": metals_error,
                 }
             ),
             503,
         )
-
 
 _ensure_snapshot_exists()
 _start_background_refresh_if_needed()
