@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-PROJECT_DIR = BACKEND_DIR.parent
+FIXTURES_DIR = BACKEND_DIR / "tests" / "fixtures"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
@@ -177,7 +177,8 @@ class PriceAlertsContractTests(unittest.TestCase):
             )
 
     def test_shared_fixture_schema_is_contract_safe(self) -> None:
-        fixture_path = PROJECT_DIR / "test" / "fixtures" / "price_alert_evaluator_v1.json"
+        fixture_path = FIXTURES_DIR / "price_alert_evaluator_v1.json"
+        self.assertTrue(fixture_path.resolve().is_relative_to(BACKEND_DIR.resolve()))
         fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
         self.assertEqual(fixture["schemaVersion"], 1)
         names = {case["name"] for case in fixture["cases"]}

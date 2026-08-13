@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -11,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-PROJECT_DIR = BACKEND_DIR.parent
+FIXTURES_DIR = BACKEND_DIR / "tests" / "fixtures"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
@@ -46,7 +49,12 @@ from price_alerts.providers import (  # noqa: E402
 from price_alerts.repository import InMemoryPriceAlertRepository  # noqa: E402
 from price_alerts.security import DeterministicTestTokenProtector  # noqa: E402
 from price_alerts.service import PriceAlertServerService  # noqa: E402
-from price_alerts.units import SUPPORTED_UNITS  # noqa: E402
+from price_alerts.units import (  # noqa: E402
+    SUPPORTED_UNITS,
+    UNIT_MANIFEST_PATH,
+    grams_per_unit,
+    price_per_troy_ounce_to_unit,
+)
 from price_alerts.worker import PriceAlertsWorker, main as worker_main  # noqa: E402
 
 
@@ -76,6 +84,81 @@ def patched_env(**values: str):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+def _is_git_ignored(path: Path) -> bool:
+    if not (BACKEND_DIR / ".git").exists():
+        return False
+    completed = subprocess.run(
+        ["git", "check-ignore", "--quiet", "--", str(path.relative_to(BACKEND_DIR))],
+        cwd=BACKEND_DIR,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+def _copy_backend_tree(destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=BACKEND_DIR,
+        text=False,
+        capture_output=True,
+        check=False,
+    )
+    if tracked.returncode == 0 and tracked.stdout:
+        relative_paths = {
+            item.decode("utf-8")
+            for item in tracked.stdout.split(b"\0")
+            if item
+        }
+        relative_paths.update(
+            {
+                "price_alerts/data/price_alert_units_v1.json",
+                "tests/fixtures/price_alert_evaluator_v1.json",
+            }
+        )
+        for relative in sorted(relative_paths):
+            source = BACKEND_DIR / relative
+            if source.is_file():
+                target = destination / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+        return
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = {".git", "__pycache__", ".pytest_cache"}
+        return {name for name in names if name in ignored or name.endswith(".pyc")}
+
+    shutil.copytree(BACKEND_DIR, destination, dirs_exist_ok=True, ignore=ignore)
+
+
+def _disabled_worker_env(backend_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    for key in [
+        "DATABASE_URL",
+        "METALS_API_KEY",
+        "PRICE_ALERTS_TOKEN_HASH_KEY",
+        "PRICE_ALERTS_TOKEN_ENCRYPTION_KEYS",
+        "PRICE_ALERTS_FIREBASE_CREDENTIALS_FILE",
+        "PRICE_ALERTS_GOOGLE_PLAY_CREDENTIALS_FILE",
+    ]:
+        env.pop(key, None)
+    env.update(
+        {
+            "PYTHONPATH": str(backend_dir),
+            "BULLIONOVA_ENVIRONMENT": "staging",
+            "BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED": "false",
+            "BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED": "false",
+            "BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS": "false",
+            "BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES": "false",
+            "DEALER_API_METALS_CACHE_ENABLED": "false",
+            "PRICE_ALERTS_FX_PROVIDER_ENABLED": "false",
+            "PRICE_ALERTS_FCM_ENABLED": "false",
+            "PRICE_ALERTS_PLAY_VERIFICATION_ENABLED": "false",
+        }
+    )
+    return env
 
 
 class PriceAlertServerFoundationTests(unittest.TestCase):
@@ -354,6 +437,37 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
         ):
             self.assertEqual(worker_main(["--once"]), 0)
 
+    def test_disabled_worker_cli_does_not_construct_integrations(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED": "false",
+                "BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED": "false",
+                "DATABASE_URL": "",
+                "METALS_API_KEY": "",
+                "PRICE_ALERTS_FCM_ENABLED": "false",
+                "PRICE_ALERTS_PLAY_VERIFICATION_ENABLED": "false",
+                "PRICE_ALERTS_FX_PROVIDER_ENABLED": "false",
+            },
+            clear=True,
+        ), mock.patch(
+            "price_alerts.worker.PostgresPriceAlertRepository",
+            side_effect=AssertionError("PostgreSQL must not be constructed"),
+        ), mock.patch(
+            "price_alerts.worker.MetalsApiProvider",
+            side_effect=AssertionError("Metals provider must not be constructed"),
+        ), mock.patch(
+            "price_alerts.worker.FxSnapshotProvider",
+            side_effect=AssertionError("FX provider must not be constructed"),
+        ), mock.patch(
+            "price_alerts.worker.FirebaseAdminFcmSender",
+            side_effect=AssertionError("FCM sender must not be constructed"),
+        ), mock.patch(
+            "price_alerts.worker.token_protector_from_env",
+            side_effect=AssertionError("token protector must not be constructed"),
+        ):
+            self.assertEqual(worker_main(["--once"]), 0)
+
     def test_migration_status_does_not_require_database_url(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(migrations_main(["--status"]), 0)
@@ -482,6 +596,103 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
         self.assertEqual(len(SUPPORTED_UNITS), 20)
         self.assertEqual(SUPPORTED_UNITS["oz"].grams_per_unit, Decimal("31.1034768"))
         self.assertEqual(SUPPORTED_UNITS["g"].grams_per_unit, Decimal("1"))
+        self.assertEqual(grams_per_unit("ozt"), Decimal("31.1034768"))
+        self.assertEqual(
+            price_per_troy_ounce_to_unit(Decimal("3110.34768"), "g"),
+            Decimal("100"),
+        )
+
+    def test_unit_manifest_is_packaged_runtime_data(self) -> None:
+        manifest_path = UNIT_MANIFEST_PATH.resolve()
+        package_dir = (BACKEND_DIR / "price_alerts").resolve()
+        self.assertTrue(manifest_path.is_relative_to(package_dir))
+        self.assertTrue(manifest_path.is_file())
+        self.assertFalse(_is_git_ignored(manifest_path))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["schemaVersion"], 1)
+        unit_ids = [item["id"] for item in manifest["units"]]
+        self.assertEqual(
+            unit_ids,
+            [
+                "g",
+                "kg",
+                "oz",
+                "dwt",
+                "gr",
+                "vn_luong",
+                "vn_chi",
+                "vn_phan",
+                "vn_ly",
+                "th_baht_bullion",
+                "th_baht_jewellery",
+                "th_salung_bullion",
+                "th_salung_jewellery",
+                "sa_tola",
+                "kr_don",
+                "ir_mesghal_gold_market",
+                "hk_tael_ordinary",
+                "hk_troy_tael",
+                "tw_tael_gold",
+                "bd_bhori_vori",
+            ],
+        )
+        self.assertEqual(manifest["troyOunceUnitId"], "oz")
+        oz = next(item for item in manifest["units"] if item["id"] == "oz")
+        self.assertEqual(oz["gramsPerUnit"], "31.1034768")
+        self.assertIn("ozt", oz["aliases"])
+
+    def test_runtime_modules_do_not_reference_parent_flutter_fixtures(self) -> None:
+        for path in (BACKEND_DIR / "price_alerts").glob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("test/fixtures", text, path.name)
+            self.assertNotIn("test\\\\fixtures", text, path.name)
+            self.assertNotIn("parents[2]", text, path.name)
+
+    def test_isolated_backend_tree_imports_and_disabled_worker_exits(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="price-alerts-runtime-") as temp_root:
+            isolated_parent = Path(temp_root) / "standalone"
+            isolated_backend = isolated_parent / "dealer_backend"
+            _copy_backend_tree(isolated_backend)
+
+            self.assertFalse((isolated_parent / "test" / "fixtures").exists())
+            self.assertTrue(
+                (isolated_backend / "price_alerts" / "data" / "price_alert_units_v1.json")
+                .is_file()
+            )
+            self.assertTrue(
+                (isolated_backend / "tests" / "fixtures" / "price_alert_evaluator_v1.json")
+                .is_file()
+            )
+
+            env = _disabled_worker_env(isolated_backend)
+            for command in [
+                [sys.executable, "-c", "import price_alerts.units; import price_alerts.worker"],
+                [sys.executable, "-m", "price_alerts.worker", "--once"],
+            ]:
+                completed = subprocess.run(
+                    command,
+                    cwd=isolated_backend,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    timeout=30,
+                    check=False,
+                )
+                output = f"{completed.stdout}\n{completed.stderr}"
+                self.assertEqual(completed.returncode, 0, output)
+                self.assertNotIn("FileNotFoundError", output)
+                self.assertNotIn("Traceback", output)
+                self.assertNotIn("metals-api.com", output)
+            worker = subprocess.run(
+                [sys.executable, "-m", "price_alerts.worker", "--once"],
+                cwd=isolated_backend,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+            self.assertIn("disabled", worker.stdout)
 
     def test_migration_contains_required_durable_tables_and_no_binary_float(self) -> None:
         sql = (BACKEND_DIR / "migrations" / "0001_price_alerts_v1.sql").read_text(
@@ -507,8 +718,7 @@ class ServerEvaluatorFixtureParityTests(unittest.TestCase):
     def test_python_evaluator_replays_dart_fixture(self) -> None:
         evaluator = PriceAlertServerEvaluator()
         fixture = json.loads(
-            (PROJECT_DIR / "test" / "fixtures" / "price_alert_evaluator_v1.json")
-            .read_text(encoding="utf-8")
+            (FIXTURES_DIR / "price_alert_evaluator_v1.json").read_text(encoding="utf-8")
         )
         for item in fixture["cases"]:
             expected = item["expected"]

@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "first valid observation establishes a baseline without triggering",
+      "alert": {"status": "activeWaitingForBaseline", "condition": "risesToOrAbove", "target": "3500"},
+      "observation": {"observationId": "obs-baseline", "price": "3400"},
+      "expected": {"reason": "baselineEstablished", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "rising crossing",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-rise", "price": "3500"},
+      "expected": {"reason": "crossedUp", "triggered": true, "status": "triggeredNeedsRearm"}
+    },
+    {
+      "name": "falling crossing",
+      "alert": {"status": "activeArmed", "condition": "fallsToOrBelow", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "above"},
+      "observation": {"observationId": "obs-fall", "price": "3500"},
+      "expected": {"reason": "crossedDown", "triggered": true, "status": "triggeredNeedsRearm"}
+    },
+    {
+      "name": "equality triggers only from the opposite side",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500.00", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-equal", "price": "3500.0"},
+      "expected": {"reason": "crossedUp", "triggered": true, "status": "triggeredNeedsRearm"}
+    },
+    {
+      "name": "no crossing when already beyond target",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "above"},
+      "observation": {"observationId": "obs-still-above", "price": "3600"},
+      "expected": {"reason": "remainedAbove", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "duplicate observation rejection",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-dup", "lastObservationId": "obs-dup", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-dup", "price": "3400"},
+      "expected": {"reason": "duplicateObservation", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "cached observation rejection",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-cached", "price": "3600", "isCached": true, "isAuthoritative": false},
+      "expected": {"reason": "cachedObservation", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "stale observation rejection",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-stale", "price": "3600", "isStale": true},
+      "expected": {"reason": "staleObservation", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "invalid price rejection",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-zero", "price": "0"},
+      "expected": {"reason": "invalidPrice", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "invalid FX rejection",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-fx", "price": "3600", "fxRequired": true, "fxIsStale": true},
+      "expected": {"reason": "staleFx", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "source mismatch",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-source", "price": "3600", "quoteId": "other-spot:Gold:AUD:oz"},
+      "expected": {"reason": "sourceMismatch", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "currency mismatch fails closed before evaluator",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-currency", "price": "3600", "currencyCode": "USD"},
+      "expected": {"constructionError": true, "reason": "currencyMismatch"}
+    },
+    {
+      "name": "unit mismatch fails closed before evaluator",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-unit", "price": "3600", "unitId": "g"},
+      "expected": {"constructionError": true, "reason": "unitMismatch"}
+    },
+    {
+      "name": "paused alert",
+      "alert": {"status": "paused", "condition": "risesToOrAbove", "target": "3500"},
+      "observation": {"observationId": "obs-paused", "price": "3600"},
+      "expected": {"reason": "alertNotEvaluable", "triggered": false, "status": "paused"}
+    },
+    {
+      "name": "triggered needs rearm alert",
+      "alert": {"status": "triggeredNeedsRearm", "condition": "risesToOrAbove", "target": "3500", "triggeredAtUtc": "2026-08-11T12:00:00Z", "triggeredObservationId": "obs-triggered", "rearmRequired": true},
+      "observation": {"observationId": "obs-after-trigger", "price": "3600"},
+      "expected": {"reason": "alreadyTriggered", "triggered": false, "status": "triggeredNeedsRearm"}
+    },
+    {
+      "name": "restore review required alert",
+      "alert": {"status": "restoreReviewRequired", "condition": "risesToOrAbove", "target": "3500", "restoredReviewRequired": true},
+      "observation": {"observationId": "obs-review", "price": "3600"},
+      "expected": {"reason": "alertNotEvaluable", "triggered": false, "status": "restoreReviewRequired"}
+    },
+    {
+      "name": "pro suspended alert",
+      "alert": {"status": "proSuspended", "condition": "risesToOrAbove", "target": "3500"},
+      "observation": {"observationId": "obs-pro", "price": "3600"},
+      "expected": {"reason": "proSuspended", "triggered": false, "status": "proSuspended"}
+    },
+    {
+      "name": "notification permission required alert",
+      "alert": {"status": "notificationPermissionRequired", "condition": "risesToOrAbove", "target": "3500"},
+      "observation": {"observationId": "obs-permission", "price": "3600"},
+      "expected": {"reason": "notificationPermissionRequired", "triggered": false, "status": "notificationPermissionRequired"}
+    },
+    {
+      "name": "dealer source unverified",
+      "alert": {"status": "activeWaitingForBaseline", "condition": "fallsToOrBelow", "target": "3400", "sourceKind": "dealerRetail", "verified": false, "priceBasis": "productTotal", "unitId": null},
+      "observation": {"observationId": "obs-dealer-unverified", "price": "3300", "sourceKind": "dealerRetail", "verified": false, "priceBasis": "productTotal", "unitId": null, "productAvailable": true, "productInStock": true},
+      "expected": {"reason": "sourceUnavailable", "triggered": false, "status": "activeWaitingForBaseline"}
+    },
+    {
+      "name": "dealer product unavailable",
+      "alert": {"status": "activeWaitingForBaseline", "condition": "fallsToOrBelow", "target": "3400", "sourceKind": "dealerRetail", "priceBasis": "productTotal", "unitId": null},
+      "observation": {"observationId": "obs-dealer-unavailable", "price": "3300", "sourceKind": "dealerRetail", "priceBasis": "productTotal", "unitId": null, "productAvailable": false, "productInStock": true},
+      "expected": {"reason": "productUnavailable", "triggered": false, "status": "activeWaitingForBaseline"}
+    },
+    {
+      "name": "dealer product out of stock",
+      "alert": {"status": "activeWaitingForBaseline", "condition": "fallsToOrBelow", "target": "3400", "sourceKind": "dealerRetail", "priceBasis": "productTotal", "unitId": null},
+      "observation": {"observationId": "obs-dealer-stock", "price": "3300", "sourceKind": "dealerRetail", "priceBasis": "productTotal", "unitId": null, "productAvailable": true, "productInStock": false},
+      "expected": {"reason": "productOutOfStock", "triggered": false, "status": "activeWaitingForBaseline"}
+    },
+    {
+      "name": "quiet-hours trigger outcome",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below", "quietHoursEnabled": true},
+      "observation": {"observationId": "obs-quiet", "price": "3600"},
+      "expected": {"reason": "crossedUp", "triggered": true, "status": "triggeredNeedsRearm", "quietHoursEnabled": true}
+    },
+    {
+      "name": "exact-decimal values with different trailing-zero scales",
+      "alert": {"status": "activeArmed", "condition": "risesToOrAbove", "target": "3500.0000", "baselineObservationId": "obs-base", "lastObservationId": "obs-base", "lastComparisonState": "below"},
+      "observation": {"observationId": "obs-scale", "price": "3500.0"},
+      "expected": {"reason": "crossedUp", "triggered": true, "status": "triggeredNeedsRearm", "canonicalTarget": "3500"}
+    },
+    {
+      "name": "very large valid exact value",
+      "alert": {"status": "activeWaitingForBaseline", "condition": "risesToOrAbove", "target": "12345678901234567890.12345678"},
+      "observation": {"observationId": "obs-large", "price": "12345678901234567890.22345678"},
+      "expected": {"reason": "baselineEstablished", "triggered": false, "status": "activeArmed"}
+    },
+    {
+      "name": "very small valid exact value",
+      "alert": {"status": "activeWaitingForBaseline", "condition": "risesToOrAbove", "target": "0.00000001"},
+      "observation": {"observationId": "obs-small", "price": "0.00000002"},
+      "expected": {"reason": "baselineEstablished", "triggered": false, "status": "activeArmed"}
+    }
+  ]
+}

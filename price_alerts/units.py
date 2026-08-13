@@ -8,8 +8,7 @@ from pathlib import Path
 from .contracts import ContractError
 
 
-PROJECT_DIR = Path(__file__).resolve().parents[2]
-UNIT_MANIFEST_PATH = PROJECT_DIR / "test" / "fixtures" / "price_alert_units_v1.json"
+UNIT_MANIFEST_PATH = Path(__file__).resolve().parent / "data" / "price_alert_units_v1.json"
 
 
 @dataclass(frozen=True)
@@ -20,6 +19,8 @@ class MetalUnit:
 
 
 def load_unit_manifest(path: Path = UNIT_MANIFEST_PATH) -> dict[str, MetalUnit]:
+    if not path.is_file():
+        raise ContractError("service_unavailable", "Packaged price alert unit manifest is missing")
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("schemaVersion") != 1:
         raise ContractError("unsupported_schema", "Unsupported unit manifest schema")

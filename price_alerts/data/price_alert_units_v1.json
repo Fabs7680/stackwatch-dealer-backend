@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "canonicalUnit": "g",
+  "troyOunceUnitId": "oz",
+  "units": [
+    {"id": "g", "gramsPerUnit": "1"},
+    {"id": "kg", "gramsPerUnit": "1000"},
+    {"id": "oz", "gramsPerUnit": "31.1034768", "aliases": ["ozt"]},
+    {"id": "dwt", "gramsPerUnit": "1.55517384"},
+    {"id": "gr", "gramsPerUnit": "0.06479891"},
+    {"id": "vn_luong", "gramsPerUnit": "37.5"},
+    {"id": "vn_chi", "gramsPerUnit": "3.75"},
+    {"id": "vn_phan", "gramsPerUnit": "0.375"},
+    {"id": "vn_ly", "gramsPerUnit": "0.0375"},
+    {"id": "th_baht_bullion", "gramsPerUnit": "15.244"},
+    {"id": "th_baht_jewellery", "gramsPerUnit": "15.16"},
+    {"id": "th_salung_bullion", "gramsPerUnit": "3.811"},
+    {"id": "th_salung_jewellery", "gramsPerUnit": "3.79"},
+    {"id": "sa_tola", "gramsPerUnit": "11.6638038"},
+    {"id": "kr_don", "gramsPerUnit": "3.75"},
+    {"id": "ir_mesghal_gold_market", "gramsPerUnit": "4.6083"},
+    {"id": "hk_tael_ordinary", "gramsPerUnit": "37.79936375"},
+    {"id": "hk_troy_tael", "gramsPerUnit": "37.429"},
+    {"id": "tw_tael_gold", "gramsPerUnit": "37.5"},
+    {"id": "bd_bhori_vori", "gramsPerUnit": "11.664"}
+  ]
+}
