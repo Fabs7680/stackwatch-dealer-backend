@@ -16,6 +16,8 @@ from flask import Flask, jsonify, make_response, request
 from flask_cors import CORS
 
 from main import build_collector
+from price_alerts.api_routes import create_price_alerts_blueprint
+from price_alerts.config import PriceAlertsServerConfig
 from storage import load_snapshot
 
 
@@ -59,6 +61,7 @@ REFRESH_INTERVAL_SECONDS = max(60, _env_int("DEALER_API_REFRESH_INTERVAL_SECONDS
 REQUEST_REFRESH_TOKEN = os.getenv("DEALER_API_REFRESH_TOKEN", "").strip()
 CORS_ORIGINS = os.getenv("DEALER_API_CORS_ORIGINS", "*").strip()
 METALS_API_KEY = os.getenv("METALS_API_KEY", "").strip()
+METALS_CACHE_ENABLED = _env_bool("DEALER_API_METALS_CACHE_ENABLED", True)
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -67,6 +70,10 @@ logging.basicConfig(
 logger = logging.getLogger("dealer_api")
 
 app = Flask(__name__)
+price_alerts_config = PriceAlertsServerConfig.from_env()
+app.register_blueprint(
+    create_price_alerts_blueprint(config=price_alerts_config),
+)
 
 if ENABLE_CORS:
     if CORS_ORIGINS == "*" or not CORS_ORIGINS:
@@ -166,11 +173,25 @@ def _build_metals_payload() -> dict[str, Any]:
     xpt = float(rates.get("XPT") or 0.0)
     xpd = float(rates.get("XPD") or 0.0)
 
+    print(
+        "METALS_API latest rates:",
+        {
+            "XAU": rates.get("XAU"),
+            "XAG": rates.get("XAG"),
+            "XPT": rates.get("XPT"),
+            "XPD": rates.get("XPD"),
+        },
+    )
+
     if xau <= 0 or xag <= 0:
-        raise RuntimeError("Metals API returned invalid XAU/XAG rates")
+        raise RuntimeError(
+            f"Metals API returned invalid XAU/XAG rates | XAU={xau} XAG={xag} XPT={xpt} XPD={xpd}"
+        )
 
     usd_aud = _fetch_usd_aud()
     change_map = _fetch_metals_fluctuation_pct("XAU,XAG,XPT,XPD")
+
+    print("METALS_API change map:", change_map)
 
     def q(price: float, change: float) -> dict[str, float]:
         return {
@@ -263,10 +284,13 @@ def _ensure_snapshot_exists() -> None:
             except Exception as inner_exc:
                 logger.warning("Initial collect failed: %s", inner_exc)
 
-    try:
-        _refresh_metals_cache("startup")
-    except Exception as exc:
-        logger.warning("Initial metals refresh failed: %s", exc)
+    if METALS_CACHE_ENABLED:
+        try:
+            _refresh_metals_cache("startup")
+        except Exception as exc:
+            logger.warning("Initial metals refresh failed: %s", exc)
+    else:
+        logger.info("Metals cache refresh disabled.")
 
 def _background_refresh_loop() -> None:
     logger.info(
@@ -281,11 +305,12 @@ def _background_refresh_loop() -> None:
             # already logged in _run_collect
             pass
 
-        try:
-            _refresh_metals_cache("background")
-        except Exception:
-            # already logged in _refresh_metals_cache
-            pass
+        if METALS_CACHE_ENABLED:
+            try:
+                _refresh_metals_cache("background")
+            except Exception:
+                # already logged in _refresh_metals_cache
+                pass
 
     logger.info("Background refresh loop stopped.")
 
@@ -374,6 +399,7 @@ def health():
                 "snapshot_updated_at": snapshot_dict.get("updated_at"),
                 "snapshot_age_seconds": snapshot_age,
                 "dealer_count": dealer_count,
+                "price_alerts": price_alerts_config.safe_health_payload(),
             }
         )
     except Exception as exc:
@@ -389,6 +415,7 @@ def health():
                     "last_refresh_started_at": last_refresh_started_at,
                     "last_refresh_completed_at": last_refresh_completed_at,
                     "last_refresh_error": last_refresh_error,
+                    "price_alerts": price_alerts_config.safe_health_payload(),
                 }
             ),
             503,
@@ -444,10 +471,11 @@ def refresh():
 
     try:
         snapshot = _run_collect("manual_refresh")
-        try:
-            _refresh_metals_cache("manual_refresh")
-        except Exception:
-            pass
+        if METALS_CACHE_ENABLED:
+            try:
+                _refresh_metals_cache("manual_refresh")
+            except Exception:
+                pass
 
         payload = snapshot.to_dict()
         payload["spot"] = metals_cache

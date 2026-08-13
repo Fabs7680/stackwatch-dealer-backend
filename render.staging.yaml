@@ -1,0 +1,129 @@
+services:
+  - type: web
+    name: bullionova-price-alerts-staging-web
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn api:app
+    healthCheckPath: /v1/health
+    autoDeployTrigger: off
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: BULLIONOVA_ENVIRONMENT
+        value: staging
+      - key: BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED
+        value: "false"
+      - key: BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED
+        value: "false"
+      - key: BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS
+        value: "false"
+      - key: BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES
+        value: "false"
+      - key: DEALER_API_STARTUP_COLLECT
+        value: "false"
+      - key: DEALER_API_BACKGROUND_REFRESH
+        value: "false"
+      - key: DEALER_API_METALS_CACHE_ENABLED
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bullionova-price-alerts-staging-db
+          property: connectionString
+      - key: PRICE_ALERTS_TOKEN_HASH_KEY
+        sync: false
+      - key: PRICE_ALERTS_TOKEN_ENCRYPTION_KEYS
+        sync: false
+      - key: METALS_API_KEY
+        sync: false
+      - key: PRICE_ALERTS_ANDROID_PACKAGE_ID
+        value: com.northstack.stackwatch.debug
+      - key: PRICE_ALERTS_PLAY_PRODUCT_ID
+        value: stackwatch_pro
+      - key: PRICE_ALERTS_METALS_PLAN_LIMIT
+        value: "5000"
+      - key: PRICE_ALERTS_METALS_APPLICATION_HARD_LIMIT
+        value: "4800"
+      - key: PRICE_ALERTS_METALS_WARNING_THRESHOLD
+        value: "4500"
+      - key: PRICE_ALERTS_METALS_POLL_INTERVAL_SECONDS
+        value: "600"
+      - key: PRICE_ALERTS_SPOT_FRESHNESS_SECONDS
+        value: "2100"
+      - key: PRICE_ALERTS_FX_PROVIDER_ENABLED
+        value: "false"
+      - key: PRICE_ALERTS_FCM_ENABLED
+        value: "false"
+      - key: PRICE_ALERTS_FIREBASE_CREDENTIALS_FILE
+        sync: false
+      - key: PRICE_ALERTS_PLAY_VERIFICATION_ENABLED
+        value: "false"
+      - key: PRICE_ALERTS_GOOGLE_PLAY_CREDENTIALS_FILE
+        sync: false
+      - key: PRICE_ALERTS_LOG_LEVEL
+        value: INFO
+
+  - type: cron
+    name: bullionova-price-alerts-staging-worker
+    runtime: python
+    plan: starter
+    schedule: "*/10 * * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m price_alerts.worker --once
+    autoDeployTrigger: off
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: BULLIONOVA_ENVIRONMENT
+        value: staging
+      - key: BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED
+        value: "false"
+      - key: BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED
+        value: "false"
+      - key: BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS
+        value: "false"
+      - key: BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bullionova-price-alerts-staging-db
+          property: connectionString
+      - key: PRICE_ALERTS_TOKEN_HASH_KEY
+        sync: false
+      - key: PRICE_ALERTS_TOKEN_ENCRYPTION_KEYS
+        sync: false
+      - key: METALS_API_KEY
+        sync: false
+      - key: PRICE_ALERTS_ANDROID_PACKAGE_ID
+        value: com.northstack.stackwatch.debug
+      - key: PRICE_ALERTS_PLAY_PRODUCT_ID
+        value: stackwatch_pro
+      - key: PRICE_ALERTS_METALS_PLAN_LIMIT
+        value: "5000"
+      - key: PRICE_ALERTS_METALS_APPLICATION_HARD_LIMIT
+        value: "4800"
+      - key: PRICE_ALERTS_METALS_WARNING_THRESHOLD
+        value: "4500"
+      - key: PRICE_ALERTS_METALS_POLL_INTERVAL_SECONDS
+        value: "600"
+      - key: PRICE_ALERTS_SPOT_FRESHNESS_SECONDS
+        value: "2100"
+      - key: PRICE_ALERTS_FX_PROVIDER_ENABLED
+        value: "false"
+      - key: PRICE_ALERTS_FCM_ENABLED
+        value: "false"
+      - key: PRICE_ALERTS_FIREBASE_CREDENTIALS_FILE
+        sync: false
+      - key: PRICE_ALERTS_PLAY_VERIFICATION_ENABLED
+        value: "false"
+      - key: PRICE_ALERTS_GOOGLE_PLAY_CREDENTIALS_FILE
+        sync: false
+      - key: PRICE_ALERTS_LOG_LEVEL
+        value: INFO
+
+databases:
+  - name: bullionova-price-alerts-staging-db
+    plan: free
+    postgresMajorVersion: "17"
+    databaseName: bullionova_price_alerts_staging
+    user: bullionova_price_alerts_staging
