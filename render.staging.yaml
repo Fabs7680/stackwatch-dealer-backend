@@ -15,7 +15,7 @@ services:
       - key: BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED
         value: "true"
       - key: BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED
-        value: "false"
+        value: "true"
       - key: BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS
         value: "false"
       - key: BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES
@@ -79,7 +79,7 @@ services:
       - key: BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED
         value: "true"
       - key: BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED
-        value: "false"
+        value: "true"
       - key: BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS
         value: "false"
       - key: BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES
