@@ -92,7 +92,11 @@ def create_price_alerts_blueprint(
 
     @blueprint.post("/v1/entitlements/verify")
     def verify_entitlement():
-        return authenticated(lambda active_service, auth_id: active_service.verify_entitlement(_json_body()))
+        return authenticated(
+            lambda active_service, auth_id: active_service.verify_entitlement(
+                {**_json_body(), "installationId": auth_id}
+            )
+        )
 
     @blueprint.get("/v1/entitlements/status")
     def entitlement_status():
@@ -104,18 +108,26 @@ def create_price_alerts_blueprint(
 
     @blueprint.post("/v1/fcm-token")
     def upsert_fcm_token():
-        return authenticated(lambda active_service, auth_id: active_service.upsert_fcm_token(_json_body()))
+        return authenticated(
+            lambda active_service, auth_id: active_service.upsert_fcm_token(
+                {**_json_body(), "installationId": auth_id}
+            )
+        )
 
     @blueprint.delete("/v1/fcm-token")
     def delete_fcm_token():
-        return authenticated(lambda active_service, auth_id: active_service.delete_fcm_token(_json_body()))
+        return authenticated(
+            lambda active_service, auth_id: active_service.delete_fcm_token(
+                {**_json_body(), "installationId": auth_id}
+            )
+        )
 
     @blueprint.put("/v1/alerts/<alert_id>")
     def upsert_alert(alert_id: str):
         return authenticated(
             lambda active_service, auth_id: active_service.upsert_alert(
                 alert_id=alert_id,
-                payload=_json_body(),
+                payload={**_json_body(), "installationId": auth_id},
             )
         )
 
@@ -164,7 +176,11 @@ def create_price_alerts_blueprint(
 
     @blueprint.delete("/v1/price-alerts")
     def delete_all_price_alerts():
-        return authenticated(lambda active_service, auth_id: active_service.delete_all_alerts(_json_body()))
+        return authenticated(
+            lambda active_service, auth_id: active_service.delete_all_alerts(
+                {**_json_body(), "installationId": auth_id}
+            )
+        )
 
     @blueprint.get("/v1/alerts/sync")
     def sync_alerts():

@@ -162,6 +162,42 @@ class PostgresPriceAlertRepository:
 
         return self._with_connection(run)
 
+    def notification_preferences_for_installation(
+        self, installation_id: str
+    ) -> NotificationPreferences | None:
+        def run(conn):
+            row = conn.execute(
+                """
+                SELECT notifications_enabled,
+                       show_price_details_in_notifications,
+                       quiet_hours_enabled,
+                       quiet_hours_start_minute,
+                       quiet_hours_end_minute,
+                       quiet_hours_time_zone_id,
+                       revision,
+                       updated_at
+                FROM price_alert_notification_preferences
+                WHERE installation_id = %s
+                """,
+                (installation_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return NotificationPreferences(
+                notifications_enabled=bool(row[0]),
+                show_price_details_in_notifications=bool(row[1]),
+                quiet_hours_policy=QuietHoursPolicy(
+                    enabled=bool(row[2]),
+                    start_minute=int(row[3] or 0),
+                    end_minute=int(row[4] or 0),
+                    time_zone_id=row[5],
+                ),
+                revision=int(row[6] or 0),
+                updated_at_utc=row[7],
+            )
+
+        return self._with_connection(run)
+
     def upsert_fcm_token(
         self,
         *,

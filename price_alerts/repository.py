@@ -50,6 +50,11 @@ class PriceAlertRepository(Protocol):
     def entitlement_for_installation(self, installation_id: str) -> EntitlementState | None:
         ...
 
+    def notification_preferences_for_installation(
+        self, installation_id: str
+    ) -> NotificationPreferences | None:
+        ...
+
     def upsert_fcm_token(
         self,
         *,
@@ -243,6 +248,11 @@ class InMemoryPriceAlertRepository:
 
     def entitlement_for_installation(self, installation_id: str) -> EntitlementState | None:
         return self.entitlements.get(installation_id)
+
+    def notification_preferences_for_installation(
+        self, installation_id: str
+    ) -> NotificationPreferences | None:
+        return self.preferences.get(installation_id)
 
     def upsert_fcm_token(
         self,

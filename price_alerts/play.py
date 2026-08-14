@@ -14,6 +14,7 @@ class PlayVerificationResult:
     verified_until_utc: datetime | None
     expires_at_utc: datetime | None
     raw_state: str
+    is_test_purchase: bool = False
 
 
 class PlayVerifier(Protocol):
@@ -102,7 +103,13 @@ class GooglePlayDeveloperApiVerifier:
             )
         except Exception as exc:
             raise ContractError("service_unavailable", "Play verification unavailable") from exc
-        return _parse_subscriptions_v2_response(response, now_utc=now_utc)
+        return _parse_subscriptions_v2_response(
+            response,
+            now_utc=now_utc,
+            expected_package_id=package_id,
+            expected_product_id=product_id,
+            expected_base_plan_id=base_plan_id,
+        )
 
     def _lazy_service(self):
         if self._service is not None:
@@ -137,41 +144,131 @@ def _parse_subscriptions_v2_response(
     response: dict[str, object],
     *,
     now_utc: datetime,
+    expected_package_id: str,
+    expected_product_id: str,
+    expected_base_plan_id: str,
 ) -> PlayVerificationResult:
+    response_package = response.get("packageName")
+    if isinstance(response_package, str) and response_package != expected_package_id:
+        raise ContractError("entitlement_invalid", "Unexpected package in Play response")
+
     state = str(response.get("subscriptionState", "SUBSCRIPTION_STATE_UNSPECIFIED"))
-    expiry = None
-    line_items = response.get("lineItems")
-    if isinstance(line_items, list) and line_items:
-        raw_expiry = line_items[0].get("expiryTime") if isinstance(line_items[0], dict) else None
-        if isinstance(raw_expiry, str):
-            expiry = datetime.fromisoformat(raw_expiry.replace("Z", "+00:00")).astimezone(timezone.utc)
-    active_states = {
-        "SUBSCRIPTION_STATE_ACTIVE": "active",
-        "SUBSCRIPTION_STATE_IN_GRACE_PERIOD": "grace",
-    }
-    inactive_states = {
+    line_item = _matching_line_item(
+        response.get("lineItems"),
+        expected_product_id=expected_product_id,
+    )
+    if line_item is None:
+        raise ContractError("entitlement_invalid", "Expected subscription line item missing")
+    base_plan_id = _line_item_base_plan_id(line_item)
+    if base_plan_id != expected_base_plan_id:
+        raise ContractError("entitlement_invalid", "Unexpected base plan in Play response")
+    expiry = _line_item_expiry(line_item)
+    if expiry is None:
+        return _unknown_result(state, now_utc=now_utc, expiry=None, response=response)
+
+    # Flutter's BillingClient flow is the acknowledgement authority via
+    # completePurchase; the backend verifies acknowledgement state only.
+    acknowledgement_state = str(
+        response.get("acknowledgementState", "ACKNOWLEDGEMENT_STATE_UNSPECIFIED")
+    )
+    if acknowledgement_state != "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED":
+        return _unknown_result(state, now_utc=now_utc, expiry=expiry, response=response)
+
+    if state == "SUBSCRIPTION_STATE_ACTIVE" and expiry > now_utc:
+        return _active_result("active", state, now_utc, expiry, response)
+    if state == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD" and expiry > now_utc:
+        return _active_result("grace", state, now_utc, expiry, response)
+    if state == "SUBSCRIPTION_STATE_CANCELED" and expiry > now_utc:
+        return _active_result("active", state, now_utc, expiry, response)
+    if state in {
         "SUBSCRIPTION_STATE_CANCELED",
         "SUBSCRIPTION_STATE_EXPIRED",
         "SUBSCRIPTION_STATE_PAUSED",
         "SUBSCRIPTION_STATE_ON_HOLD",
-    }
-    if state in active_states and (expiry is None or expiry > now_utc):
-        return PlayVerificationResult(
-            status=active_states[state],
-            verified_until_utc=now_utc + timedelta(hours=12),
-            expires_at_utc=expiry,
-            raw_state=state,
-        )
-    if state in inactive_states:
+        "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED",
+        "SUBSCRIPTION_STATE_REVOKED",
+    }:
         return PlayVerificationResult(
             status="inactive",
             verified_until_utc=now_utc,
             expires_at_utc=expiry,
             raw_state=state,
+            is_test_purchase=_is_test_purchase(response),
         )
+    return _unknown_result(state, now_utc=now_utc, expiry=expiry, response=response)
+
+
+def _matching_line_item(
+    value: object,
+    *,
+    expected_product_id: str,
+) -> dict[str, object] | None:
+    if not isinstance(value, list):
+        return None
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        candidate = dict(item)
+        if candidate.get("productId") == expected_product_id:
+            return candidate
+    return None
+
+
+def _line_item_base_plan_id(line_item: dict[str, object]) -> str | None:
+    offer_details = line_item.get("offerDetails")
+    if isinstance(offer_details, dict):
+        base_plan_id = offer_details.get("basePlanId")
+        if isinstance(base_plan_id, str) and base_plan_id.strip():
+            return base_plan_id.strip()
+    base_plan_id = line_item.get("basePlanId")
+    if isinstance(base_plan_id, str) and base_plan_id.strip():
+        return base_plan_id.strip()
+    return None
+
+
+def _line_item_expiry(line_item: dict[str, object]) -> datetime | None:
+    raw_expiry = line_item.get("expiryTime")
+    if not isinstance(raw_expiry, str) or not raw_expiry.strip():
+        return None
+    try:
+        return datetime.fromisoformat(raw_expiry.replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        )
+    except ValueError:
+        return None
+
+
+def _active_result(
+    status: str,
+    state: str,
+    now_utc: datetime,
+    expiry: datetime,
+    response: dict[str, object],
+) -> PlayVerificationResult:
+    return PlayVerificationResult(
+        status=status,
+        verified_until_utc=now_utc + timedelta(hours=12),
+        expires_at_utc=expiry,
+        raw_state=state,
+        is_test_purchase=_is_test_purchase(response),
+    )
+
+
+def _unknown_result(
+    state: str,
+    *,
+    now_utc: datetime,
+    expiry: datetime | None,
+    response: dict[str, object],
+) -> PlayVerificationResult:
     return PlayVerificationResult(
         status="unknown",
         verified_until_utc=now_utc,
         expires_at_utc=expiry,
         raw_state=state,
+        is_test_purchase=_is_test_purchase(response),
     )
+
+
+def _is_test_purchase(response: dict[str, object]) -> bool:
+    return isinstance(response.get("testPurchase"), dict)

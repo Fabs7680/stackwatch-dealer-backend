@@ -269,7 +269,8 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
                 },
             },
         )
-        self.assertEqual(fcm.status_code, 200)
+        self.assertEqual(fcm.status_code, 503)
+        self.assertEqual(fcm.get_json()["code"], "service_unavailable")
         alert_response = client.put(
             "/v1/alerts/alert-1",
             headers=headers,

@@ -193,6 +193,17 @@ class PriceAlertServerService:
     def upsert_fcm_token(self, payload: dict[str, Any]) -> dict[str, Any]:
         reject_forbidden_portfolio_fields(payload)
         request = FcmTokenRequest.from_json(payload)
+        now = utc_now()
+        if not self.config.fcm_enabled:
+            raise ContractError("service_unavailable", "FCM registration is disabled")
+        entitlement = self.repository.entitlement_for_installation(request.installation_id)
+        if entitlement is None or not _entitlement_current(entitlement, now):
+            raise ContractError("entitlement_required", "Bullionova Pro entitlement required")
+        preferences = self.repository.notification_preferences_for_installation(
+            request.installation_id
+        )
+        if preferences is None or not preferences.notifications_enabled:
+            raise ContractError("malformed_request", "Notifications are disabled")
         protected = self.token_protector.protect(request.fcm_token)
         self.repository.upsert_fcm_token(
             installation_id=request.installation_id,
@@ -202,7 +213,7 @@ class PriceAlertServerService:
             platform=request.platform,
             token_issued_at_utc=request.token_issued_at_utc,
         )
-        return {"schemaVersion": SCHEMA_VERSION, "ok": True, "serverTimeUtc": utc_iso(utc_now())}
+        return {"schemaVersion": SCHEMA_VERSION, "ok": True, "serverTimeUtc": utc_iso(now)}
 
     def delete_fcm_token(self, payload: dict[str, Any]) -> dict[str, Any]:
         reject_forbidden_portfolio_fields(payload)
@@ -340,6 +351,16 @@ def _preferences_from_json(value: dict[str, Any]) -> NotificationPreferences:
         revision=int(value.get("revision") or 0),
         updated_at_utc=utc_now(),
     )
+
+
+def _entitlement_current(entitlement: EntitlementState, now_utc: datetime) -> bool:
+    if not entitlement.is_active:
+        return False
+    if entitlement.verified_until_utc is not None and entitlement.verified_until_utc < now_utc:
+        return False
+    if entitlement.expires_at_utc is not None and entitlement.expires_at_utc < now_utc:
+        return False
+    return True
 
 
 def _alert_from_json(
