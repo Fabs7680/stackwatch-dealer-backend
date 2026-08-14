@@ -13,7 +13,7 @@ services:
       - key: BULLIONOVA_ENVIRONMENT
         value: staging
       - key: BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED
-        value: "false"
+        value: "true"
       - key: BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED
         value: "false"
       - key: BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS
