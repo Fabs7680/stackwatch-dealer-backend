@@ -37,7 +37,7 @@ services:
       - key: METALS_API_KEY
         sync: false
       - key: PRICE_ALERTS_ANDROID_PACKAGE_ID
-        value: com.northstack.stackwatch.debug
+        value: com.northstack.stackwatch
       - key: PRICE_ALERTS_PLAY_PRODUCT_ID
         value: stackwatch_pro
       - key: PRICE_ALERTS_METALS_PLAN_LIMIT
@@ -95,7 +95,7 @@ services:
       - key: METALS_API_KEY
         sync: false
       - key: PRICE_ALERTS_ANDROID_PACKAGE_ID
-        value: com.northstack.stackwatch.debug
+        value: com.northstack.stackwatch
       - key: PRICE_ALERTS_PLAY_PRODUCT_ID
         value: stackwatch_pro
       - key: PRICE_ALERTS_METALS_PLAN_LIMIT

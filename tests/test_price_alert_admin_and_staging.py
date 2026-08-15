@@ -13,7 +13,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from price_alerts.admin import (  # noqa: E402
-    DEBUG_PACKAGE_ID,
+    CONTROLLED_STAGING_PACKAGE_ID,
     TEST_PRODUCT_ID,
     grant_test_entitlement,
     main as admin_main,
@@ -39,21 +39,21 @@ from price_alerts.synthetic import run_synthetic_spot_crossing  # noqa: E402
 class PriceAlertAdminTest(unittest.TestCase):
     def test_test_entitlements_are_default_disabled(self) -> None:
         repo = _FakeAdminRepository()
-        repo.packages["installation_1"] = DEBUG_PACKAGE_ID
+        repo.packages["installation_1"] = CONTROLLED_STAGING_PACKAGE_ID
 
         with self.assertRaises(ContractError):
             grant_test_entitlement(
                 config=PriceAlertsServerConfig(environment="staging"),
                 repository=repo,
                 installation_id="installation_1",
-                package_id=DEBUG_PACKAGE_ID,
+                package_id=CONTROLLED_STAGING_PACKAGE_ID,
                 ttl_hours=1,
                 now_utc=_now(),
             )
 
     def test_production_rejects_test_entitlements_even_when_flag_set(self) -> None:
         repo = _FakeAdminRepository()
-        repo.packages["installation_1"] = DEBUG_PACKAGE_ID
+        repo.packages["installation_1"] = CONTROLLED_STAGING_PACKAGE_ID
 
         with self.assertRaises(ContractError):
             grant_test_entitlement(
@@ -63,39 +63,39 @@ class PriceAlertAdminTest(unittest.TestCase):
                 ),
                 repository=repo,
                 installation_id="installation_1",
-                package_id=DEBUG_PACKAGE_ID,
+                package_id=CONTROLLED_STAGING_PACKAGE_ID,
                 ttl_hours=1,
                 now_utc=_now(),
             )
 
     def test_wrong_package_is_rejected(self) -> None:
         repo = _FakeAdminRepository()
-        repo.packages["installation_1"] = "com.northstack.stackwatch"
+        repo.packages["installation_1"] = "com.northstack.stackwatch.debug"
 
         with self.assertRaises(ContractError):
             grant_test_entitlement(
                 config=_staging_config(),
                 repository=repo,
                 installation_id="installation_1",
-                package_id="com.northstack.stackwatch",
+                package_id="com.northstack.stackwatch.debug",
                 ttl_hours=1,
                 now_utc=_now(),
             )
 
     def test_grant_revoke_status_and_audit_event(self) -> None:
         repo = _FakeAdminRepository()
-        repo.packages["installation_1"] = DEBUG_PACKAGE_ID
+        repo.packages["installation_1"] = CONTROLLED_STAGING_PACKAGE_ID
 
         result = grant_test_entitlement(
             config=_staging_config(),
             repository=repo,
             installation_id="installation_1",
-            package_id=DEBUG_PACKAGE_ID,
+            package_id=CONTROLLED_STAGING_PACKAGE_ID,
             ttl_hours=2,
             now_utc=_now(),
         )
 
-        self.assertEqual(result.package_id, DEBUG_PACKAGE_ID)
+        self.assertEqual(result.package_id, CONTROLLED_STAGING_PACKAGE_ID)
         self.assertEqual(result.expires_at_utc, datetime(2026, 8, 13, 2, tzinfo=timezone.utc))
         self.assertEqual(repo.entitlements["installation_1"].status, "active")
         self.assertEqual(repo.audit_events[-1]["event_type"], "staging_test_entitlement_granted")
@@ -119,14 +119,14 @@ class PriceAlertAdminTest(unittest.TestCase):
 
     def test_ttl_is_capped_to_24_hours(self) -> None:
         repo = _FakeAdminRepository()
-        repo.packages["installation_1"] = DEBUG_PACKAGE_ID
+        repo.packages["installation_1"] = CONTROLLED_STAGING_PACKAGE_ID
 
         with self.assertRaises(ContractError):
             grant_test_entitlement(
                 config=_staging_config(),
                 repository=repo,
                 installation_id="installation_1",
-                package_id=DEBUG_PACKAGE_ID,
+                package_id=CONTROLLED_STAGING_PACKAGE_ID,
                 ttl_hours=25,
                 now_utc=_now(),
             )
@@ -148,7 +148,7 @@ class PriceAlertAdminTest(unittest.TestCase):
                         "--installation-id",
                         "installation_1",
                         "--package-id",
-                        DEBUG_PACKAGE_ID,
+                        CONTROLLED_STAGING_PACKAGE_ID,
                         "--ttl-hours",
                         "1",
                     ]
@@ -330,8 +330,8 @@ def _synthetic_repository() -> InMemoryPriceAlertRepository:
     repo.installations[installation_id] = Installation(
         installation_id=installation_id,
         platform="android",
-        package_id=DEBUG_PACKAGE_ID,
-        app_version_name="1.0.22-debug",
+        package_id=CONTROLLED_STAGING_PACKAGE_ID,
+        app_version_name="1.0.22",
         app_version_code=23,
         locale="en_AU",
         time_zone_id="UTC",

@@ -15,7 +15,7 @@ from .postgres_repository import PostgresPriceAlertRepository
 from .synthetic import run_synthetic_spot_crossing
 
 
-DEBUG_PACKAGE_ID = "com.northstack.stackwatch.debug"
+CONTROLLED_STAGING_PACKAGE_ID = "com.northstack.stackwatch"
 TEST_PRODUCT_ID = "stackwatch_pro"
 
 
@@ -219,13 +219,16 @@ def grant_test_entitlement(
 ) -> TestEntitlementGrant:
     now = _utc(now_utc)
     _require_staging_test_mode(config)
-    _require_debug_package(package_id)
+    _require_configured_package(package_id, config)
     max_ttl = min(config.max_test_entitlement_ttl_hours, 24)
     if ttl_hours < 1 or ttl_hours > max_ttl:
         raise ContractError("malformed_request", "TTL must be between 1 and 24 hours")
     registered_package = repository.installation_package_id(installation_id)
-    if registered_package != DEBUG_PACKAGE_ID:
-        raise ContractError("entitlement_invalid", "Installation is not the debug package")
+    if registered_package != config.package_id:
+        raise ContractError(
+            "entitlement_invalid",
+            "Installation is not registered to the configured package",
+        )
     expires_at = now + timedelta(hours=ttl_hours)
     entitlement = EntitlementState(
         status="active",
@@ -402,9 +405,12 @@ def _require_staging_test_mode(config: PriceAlertsServerConfig) -> None:
         raise ContractError("entitlement_invalid", "Test entitlements are disabled")
 
 
-def _require_debug_package(package_id: str) -> None:
-    if package_id != DEBUG_PACKAGE_ID:
-        raise ContractError("entitlement_invalid", "Only debug package can receive test entitlement")
+def _require_configured_package(package_id: str, config: PriceAlertsServerConfig) -> None:
+    if package_id != config.package_id:
+        raise ContractError(
+            "entitlement_invalid",
+            "Only the configured staging package can receive test entitlement",
+        )
 
 
 def _require_synthetic_admin_mode(config: PriceAlertsServerConfig) -> None:

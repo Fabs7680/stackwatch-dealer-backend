@@ -65,13 +65,13 @@ The debug tablet cannot prove a production Play entitlement. Staging may use a s
 
 - `BULLIONOVA_ENVIRONMENT=staging`
 - `BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS=true`
-- the registered installation package is `com.northstack.stackwatch.debug`
+- the registered installation package is `com.northstack.stackwatch`
 - the requested TTL is explicit and no more than 24 hours
 
 Example, from the repository root:
 
 ```powershell
-python -m dealer_backend.price_alerts.admin grant-test-entitlement --installation-id installation_xxx --package-id com.northstack.stackwatch.debug --ttl-hours 2
+python -m dealer_backend.price_alerts.admin grant-test-entitlement --installation-id installation_xxx --package-id com.northstack.stackwatch --ttl-hours 2
 python -m dealer_backend.price_alerts.admin status --installation-id installation_xxx
 python -m dealer_backend.price_alerts.admin revoke-test-entitlement --installation-id installation_xxx
 ```

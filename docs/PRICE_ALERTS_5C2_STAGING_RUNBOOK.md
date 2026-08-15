@@ -95,7 +95,7 @@ Use placeholders for all secrets and staging URLs. Do not paste credentials into
 
 15. Grant temporary staging debug entitlement through CLI.
     - In the staging web service shell:
-      - `BULLIONOVA_ENVIRONMENT=staging BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED=true BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS=true python -m price_alerts.admin grant-test-entitlement --installation-id <installation_id> --package-id com.northstack.stackwatch.debug --ttl-hours 1`
+      - `BULLIONOVA_ENVIRONMENT=staging BULLIONOVA_PRICE_ALERTS_SERVER_ENABLED=true BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS=true python -m price_alerts.admin grant-test-entitlement --installation-id <installation_id> --package-id com.northstack.stackwatch --ttl-hours 1`
     - TTL must not exceed 24 hours.
 
 16. Create and sync a Spot Price Alert.
