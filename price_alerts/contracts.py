@@ -11,7 +11,7 @@ SCHEMA_VERSION = 1
 
 API_PATHS = {
     "register_installation": "POST /v1/installations/register",
-    "update_installation_settings": "PATCH /v1/installations/{id}/settings",
+    "update_installation_settings": "PATCH /v1/installations/settings",
     "verify_entitlement": "POST /v1/entitlements/verify",
     "upsert_alert": "PUT /v1/alerts/{alertId}",
     "pause_alert": "POST /v1/alerts/{alertId}:pause",

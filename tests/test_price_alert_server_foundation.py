@@ -431,6 +431,125 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
         self.assertEqual(entitlement.get_json()["status"], "active")
         self.assertEqual(len(play_verifier.calls), 1)
 
+    def test_settings_update_uses_authenticated_no_id_route_and_large_revision(self) -> None:
+        from flask import Flask
+        from price_alerts.api_routes import create_price_alerts_blueprint
+
+        repository = InMemoryPriceAlertRepository()
+        service = PriceAlertServerService(
+            config=PriceAlertsServerConfig(enabled=True),
+            repository=repository,
+            play_verifier=StaticPlayVerifier(),
+            token_protector=DeterministicTestTokenProtector(),
+        )
+        app = Flask(__name__)
+        app.register_blueprint(
+            create_price_alerts_blueprint(
+                config=PriceAlertsServerConfig(enabled=True),
+                server_factory=lambda: service,
+            )
+        )
+        client = app.test_client()
+        registration = client.post(
+            "/v1/installations/register",
+            json={
+                "schemaVersion": 1,
+                "platform": "android",
+                "packageId": "com.northstack.stackwatch",
+                "appVersionName": "1.0.22",
+                "appVersionCode": 23,
+            },
+        ).get_json()
+        headers = {
+            "Authorization": (
+                f"BullionovaInstallation {registration['installationId']}:"
+                f"{registration['installationSecret']}"
+            )
+        }
+
+        response = client.patch(
+            "/v1/installations/settings",
+            headers=headers,
+            json={
+                "schemaVersion": 1,
+                "notificationPreferences": {
+                    "notificationsEnabled": True,
+                    "showPriceDetailsInNotifications": False,
+                    "revision": 1760000000000000,
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            repository.preferences[registration["installationId"]].revision,
+            1760000000000000,
+        )
+
+    def test_legacy_settings_route_rejects_cross_installation_update(self) -> None:
+        from flask import Flask
+        from price_alerts.api_routes import create_price_alerts_blueprint
+
+        repository = InMemoryPriceAlertRepository()
+        service = PriceAlertServerService(
+            config=PriceAlertsServerConfig(enabled=True),
+            repository=repository,
+            play_verifier=StaticPlayVerifier(),
+            token_protector=DeterministicTestTokenProtector(),
+        )
+        app = Flask(__name__)
+        app.register_blueprint(
+            create_price_alerts_blueprint(
+                config=PriceAlertsServerConfig(enabled=True),
+                server_factory=lambda: service,
+            )
+        )
+        client = app.test_client()
+        first = client.post(
+            "/v1/installations/register",
+            json={
+                "schemaVersion": 1,
+                "platform": "android",
+                "packageId": "com.northstack.stackwatch",
+                "appVersionName": "1.0.22",
+                "appVersionCode": 23,
+            },
+        ).get_json()
+        second = client.post(
+            "/v1/installations/register",
+            json={
+                "schemaVersion": 1,
+                "platform": "android",
+                "packageId": "com.northstack.stackwatch",
+                "appVersionName": "1.0.22",
+                "appVersionCode": 23,
+            },
+        ).get_json()
+        headers = {
+            "Authorization": (
+                f"BullionovaInstallation {first['installationId']}:"
+                f"{first['installationSecret']}"
+            )
+        }
+
+        response = client.patch(
+            f"/v1/installations/{second['installationId']}/settings",
+            headers=headers,
+            json={
+                "schemaVersion": 1,
+                "notificationPreferences": {
+                    "notificationsEnabled": False,
+                    "showPriceDetailsInNotifications": False,
+                    "revision": 1,
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertTrue(
+            repository.preferences[second["installationId"]].notifications_enabled
+        )
+
     def test_sensitive_portfolio_fields_fail_closed(self) -> None:
         from flask import Flask
         from price_alerts.api_routes import create_price_alerts_blueprint
@@ -841,6 +960,9 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
         sql = (BACKEND_DIR / "migrations" / "0001_price_alerts_v1.sql").read_text(
             encoding="utf-8"
         )
+        revision_migration = (
+            BACKEND_DIR / "migrations" / "0002_price_alert_preferences_revision_bigint.sql"
+        ).read_text(encoding="utf-8")
         for table in [
             "price_alert_fx_observations",
             "price_alert_idempotency_records",
@@ -851,6 +973,8 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
         self.assertNotIn("DOUBLE PRECISION", sql)
         self.assertNotIn(" FLOAT", sql)
         self.assertNotIn(" REAL", sql)
+        self.assertIn("price_alert_notification_preferences", revision_migration)
+        self.assertIn("revision TYPE BIGINT", revision_migration)
 
     def test_provider_modules_do_not_import_external_sdks(self) -> None:
         self.assertNotIn("firebase_admin", sys.modules)

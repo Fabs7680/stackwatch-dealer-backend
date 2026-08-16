@@ -82,12 +82,28 @@ def create_price_alerts_blueprint(
     def register_installation():
         return disabled_or_call(lambda: service().register_installation(_json_body()))
 
-    @blueprint.patch("/v1/installations/<installation_id>/settings")
-    def update_installation_settings(installation_id: str):
+    @blueprint.patch("/v1/installations/settings")
+    def update_authenticated_installation_settings():
         return authenticated(
             lambda active_service, auth_id: active_service.update_installation_settings(
-                {**_json_body(), "installationId": installation_id or auth_id}
+                {**_json_body(), "installationId": auth_id}
             )
+        )
+
+    @blueprint.patch("/v1/installations/<installation_id>/settings")
+    def update_installation_settings(installation_id: str):
+        def update(active_service, auth_id: str):
+            if installation_id != auth_id:
+                raise ContractError(
+                    "unauthorised_installation",
+                    "Installation credentials invalid",
+                )
+            return active_service.update_installation_settings(
+                {**_json_body(), "installationId": auth_id}
+            )
+
+        return authenticated(
+            update
         )
 
     @blueprint.post("/v1/entitlements/verify")

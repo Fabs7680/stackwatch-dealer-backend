@@ -231,6 +231,7 @@ class PriceAlertsContractTests(unittest.TestCase):
         self.assertIn("/v1/alerts", route_source)
         self.assertIn("/v1/fcm-token", route_source)
         self.assertIn("/v1/installations/register", route_source)
+        self.assertIn("/v1/installations/settings", route_source)
         self.assertIn("Price Alerts server is disabled", route_source)
 
 
