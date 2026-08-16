@@ -850,6 +850,12 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
         })
         self.assertNotIn("price", fcm_sender.sent[0])
         self.assertNotIn("target", fcm_sender.sent[0])
+        event = next(iter(repository.trigger_events.values()))
+        self.assertIn(event.observation_id, repository.spot_observations)
+        self.assertEqual(
+            repository.spot_observations[event.observation_id].source.provider_id,
+            "bullionova-spot",
+        )
         delivery = next(iter(repository.deliveries.values()))
         self.assertEqual(delivery.delivery_state, "delivered")
         self.assertEqual(delivery.provider_message_id, "fake-message-id")

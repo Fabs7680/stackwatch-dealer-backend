@@ -100,6 +100,9 @@ class PriceAlertRepository(Protocol):
     def persist_spot_snapshot(self, snapshot: SpotProviderSnapshot) -> list[PriceAlertObservation]:
         ...
 
+    def persist_alert_observation(self, observation: PriceAlertObservation) -> None:
+        ...
+
     def persist_fx_snapshot(self, snapshot: FxSnapshot) -> None:
         ...
 
@@ -387,6 +390,9 @@ class InMemoryPriceAlertRepository:
             observations.append(observation)
         return observations
 
+    def persist_alert_observation(self, observation: PriceAlertObservation) -> None:
+        self.spot_observations[observation.observation_id] = observation
+
     def persist_fx_snapshot(self, snapshot: FxSnapshot) -> None:
         self.fx_snapshot = snapshot
 
@@ -402,6 +408,8 @@ class InMemoryPriceAlertRepository:
 
     def create_trigger_event_once(self, event: PriceAlertTriggerEvent) -> bool:
         with self._lock:
+            if event.observation_id not in self.spot_observations:
+                raise ContractError("referential_integrity", "Trigger observation must be persisted first")
             if event.event_id in self.trigger_events:
                 return False
             duplicate = any(

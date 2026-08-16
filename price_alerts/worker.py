@@ -129,6 +129,7 @@ class PriceAlertsWorker:
                     evaluated_at_utc=now,
                 )
                 evaluated += 1
+                self.repository.persist_alert_observation(observation)
                 self.repository.update_alert(result.alert)
                 if result.trigger_event is None:
                     continue

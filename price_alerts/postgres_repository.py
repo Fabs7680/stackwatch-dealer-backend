@@ -508,6 +508,75 @@ class PostgresPriceAlertRepository:
             self._with_connection(run)
         return observations
 
+    def persist_alert_observation(self, observation: PriceAlertObservation) -> None:
+        if observation.price is None:
+            return
+        price_unscaled, price_scale = decimal_to_unscaled(observation.price)
+        native_price_unscaled = None
+        native_price_scale = None
+        if observation.native_price is not None:
+            native_price_unscaled, native_price_scale = decimal_to_unscaled(observation.native_price)
+
+        def run(conn) -> None:
+            conn.execute(
+                """
+                INSERT INTO price_alert_quote_observations(
+                    observation_id, source_kind, provider_id, metal_id,
+                    quote_id, currency_code, unit_id, price_basis,
+                    price_numeric, price_unscaled, price_scale,
+                    provider_timestamp, received_at, valid_until,
+                    is_authoritative, is_cached, is_stale, source_available,
+                    fx_required, fx_timestamp, fx_is_stale,
+                    product_available, product_in_stock,
+                    native_currency_code, native_price_numeric,
+                    native_price_unscaled, native_price_scale, source_url
+                ) VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s,
+                    %s, %s,
+                    %s, %s, %s
+                )
+                ON CONFLICT (observation_id) DO NOTHING
+                """,
+                (
+                    observation.observation_id,
+                    observation.source.source_kind,
+                    observation.source.provider_id,
+                    observation.metal_id,
+                    observation.source.quote_id,
+                    observation.currency_code,
+                    observation.unit_id,
+                    observation.price_basis,
+                    observation.price,
+                    price_unscaled,
+                    price_scale,
+                    observation.provider_timestamp_utc,
+                    observation.received_at_utc,
+                    observation.valid_until_utc,
+                    observation.is_authoritative,
+                    observation.is_cached,
+                    observation.is_stale,
+                    observation.source_available,
+                    observation.fx_required,
+                    observation.fx_timestamp_utc,
+                    observation.fx_is_stale,
+                    observation.product_available,
+                    observation.product_in_stock,
+                    observation.native_currency_code,
+                    observation.native_price,
+                    native_price_unscaled,
+                    native_price_scale,
+                    observation.source_url,
+                ),
+            )
+
+        self._with_connection(run)
+
     def persist_fx_snapshot(self, snapshot: FxSnapshot) -> None:
         def run(conn) -> None:
             with conn.transaction():
