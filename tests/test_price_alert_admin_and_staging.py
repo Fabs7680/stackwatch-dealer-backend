@@ -245,7 +245,7 @@ class PriceAlertAdminTest(unittest.TestCase):
 
 
 class RenderStagingBlueprintTest(unittest.TestCase):
-    def test_blueprint_keeps_server_disabled_and_uses_ten_minute_cron(self) -> None:
+    def test_blueprint_keeps_staging_active_and_uses_ten_minute_cron(self) -> None:
         text = (BACKEND_DIR / "render.staging.yaml").read_text(encoding="utf-8")
 
         self.assertIn("bullionova-price-alerts-staging-web", text)
@@ -260,7 +260,17 @@ class RenderStagingBlueprintTest(unittest.TestCase):
         self.assertIn("BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES", text)
         self.assertIn("DEALER_API_METALS_CACHE_ENABLED", text)
         self.assertIn("sync: false", text)
-        self.assertIn('value: "false"', text)
+        self.assertEqual(text.count('value: "true"'), 6)
+        self.assertEqual(text.count("PRICE_ALERTS_FCM_ENABLED"), 2)
+        self.assertEqual(
+            text.count(
+                "value: /etc/secrets/"
+                "bullionova-production-firebase-adminsdk-fbsvc-3bddb9bba5.json"
+            ),
+            2,
+        )
+        self.assertIn("PRICE_ALERTS_ANDROID_PACKAGE_ID", text)
+        self.assertNotIn("com.northstack.stackwatch.debug", text)
         self.assertNotIn("METALS_API_KEY=", text)
         self.assertNotIn("PRICE_ALERTS_TOKEN_HASH_KEY=", text)
 

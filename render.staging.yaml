@@ -53,9 +53,9 @@ services:
       - key: PRICE_ALERTS_FX_PROVIDER_ENABLED
         value: "false"
       - key: PRICE_ALERTS_FCM_ENABLED
-        value: "false"
+        value: "true"
       - key: PRICE_ALERTS_FIREBASE_CREDENTIALS_FILE
-        sync: false
+        value: /etc/secrets/bullionova-production-firebase-adminsdk-fbsvc-3bddb9bba5.json
       - key: PRICE_ALERTS_PLAY_VERIFICATION_ENABLED
         value: "false"
       - key: PRICE_ALERTS_GOOGLE_PLAY_CREDENTIALS_FILE
@@ -111,9 +111,9 @@ services:
       - key: PRICE_ALERTS_FX_PROVIDER_ENABLED
         value: "false"
       - key: PRICE_ALERTS_FCM_ENABLED
-        value: "false"
+        value: "true"
       - key: PRICE_ALERTS_FIREBASE_CREDENTIALS_FILE
-        sync: false
+        value: /etc/secrets/bullionova-production-firebase-adminsdk-fbsvc-3bddb9bba5.json
       - key: PRICE_ALERTS_PLAY_VERIFICATION_ENABLED
         value: "false"
       - key: PRICE_ALERTS_GOOGLE_PLAY_CREDENTIALS_FILE
