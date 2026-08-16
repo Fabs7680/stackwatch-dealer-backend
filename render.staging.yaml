@@ -17,7 +17,7 @@ services:
       - key: BULLIONOVA_PRICE_ALERTS_WORKER_ENABLED
         value: "true"
       - key: BULLIONOVA_PRICE_ALERTS_ALLOW_TEST_ENTITLEMENTS
-        value: "false"
+        value: "true"
       - key: BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES
         value: "false"
       - key: DEALER_API_STARTUP_COLLECT

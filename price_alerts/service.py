@@ -142,6 +142,14 @@ class PriceAlertServerService:
         if package_id != self.config.package_id or product_id != self.config.product_id:
             raise ContractError("entitlement_invalid", "Unsupported package or product")
         now = utc_now()
+        existing = self.repository.entitlement_for_installation(installation_id)
+        if (
+            self.config.environment == "staging"
+            and self.config.allow_test_entitlements
+            and existing is not None
+            and _entitlement_current(existing, now)
+        ):
+            return _entitlement_response(existing, now)
         result = self.play_verifier.verify_subscription(
             package_id=package_id,
             product_id=product_id,
@@ -361,6 +369,24 @@ def _entitlement_current(entitlement: EntitlementState, now_utc: datetime) -> bo
     if entitlement.expires_at_utc is not None and entitlement.expires_at_utc < now_utc:
         return False
     return True
+
+
+def _entitlement_response(entitlement: EntitlementState, now_utc: datetime) -> dict[str, Any]:
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "status": entitlement.status,
+        "serverTimeUtc": utc_iso(now_utc),
+        **(
+            {"verifiedUntilUtc": utc_iso(entitlement.verified_until_utc)}
+            if entitlement.verified_until_utc
+            else {}
+        ),
+        **(
+            {"expiresAtUtc": utc_iso(entitlement.expires_at_utc)}
+            if entitlement.expires_at_utc
+            else {}
+        ),
+    }
 
 
 def _alert_from_json(

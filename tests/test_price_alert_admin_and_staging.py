@@ -260,7 +260,7 @@ class RenderStagingBlueprintTest(unittest.TestCase):
         self.assertIn("BULLIONOVA_PRICE_ALERTS_ALLOW_SYNTHETIC_QUOTES", text)
         self.assertIn("DEALER_API_METALS_CACHE_ENABLED", text)
         self.assertIn("sync: false", text)
-        self.assertEqual(text.count('value: "true"'), 6)
+        self.assertEqual(text.count('value: "true"'), 7)
         self.assertEqual(text.count("PRICE_ALERTS_FCM_ENABLED"), 2)
         self.assertEqual(
             text.count(

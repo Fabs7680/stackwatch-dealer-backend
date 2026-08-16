@@ -289,6 +289,148 @@ class PriceAlertServerFoundationTests(unittest.TestCase):
         self.assertEqual(sync.status_code, 200)
         self.assertEqual(len(sync.get_json()["records"]), 1)
 
+    def test_staging_test_entitlement_verify_uses_existing_bound_grant(self) -> None:
+        from flask import Flask
+        from price_alerts.api_routes import create_price_alerts_blueprint
+
+        repository = InMemoryPriceAlertRepository()
+        play_verifier = StaticPlayVerifier()
+        config = PriceAlertsServerConfig(
+            environment="staging",
+            enabled=True,
+            allow_test_entitlements=True,
+        )
+        service = PriceAlertServerService(
+            config=config,
+            repository=repository,
+            play_verifier=play_verifier,
+            token_protector=DeterministicTestTokenProtector(),
+        )
+        app = Flask(__name__)
+        app.register_blueprint(
+            create_price_alerts_blueprint(
+                config=config,
+                server_factory=lambda: service,
+            )
+        )
+        client = app.test_client()
+        registration = client.post(
+            "/v1/installations/register",
+            json={
+                "schemaVersion": 1,
+                "platform": "android",
+                "packageId": "com.northstack.stackwatch",
+                "appVersionName": "1.0.22",
+                "appVersionCode": 23,
+            },
+        )
+        credentials = registration.get_json()
+        headers = {
+            "Authorization": (
+                f"BullionovaInstallation {credentials['installationId']}:"
+                f"{credentials['installationSecret']}"
+            )
+        }
+        now = datetime.now(timezone.utc)
+        repository.entitlements[credentials["installationId"]] = EntitlementState(
+            status="active",
+            verified_until_utc=now + timedelta(hours=1),
+            expires_at_utc=now + timedelta(hours=1),
+            last_verified_at_utc=now,
+        )
+
+        entitlement = client.post(
+            "/v1/entitlements/verify",
+            headers=headers,
+            json={
+                "schemaVersion": 1,
+                "installationId": credentials["installationId"],
+                "packageId": "com.northstack.stackwatch",
+                "productId": "stackwatch_pro",
+                "basePlanId": "monthly",
+                "playPurchaseToken": "fake-play-token-not-logged",
+                "idempotency": {
+                    "key": "verify-entitlement-0001",
+                    "createdAtUtc": "2026-08-12T00:00:00Z",
+                },
+            },
+        )
+
+        self.assertEqual(entitlement.status_code, 200)
+        self.assertEqual(entitlement.get_json()["status"], "active")
+        self.assertEqual(play_verifier.calls, [])
+
+    def test_test_entitlement_verify_shortcut_is_excluded_from_production(self) -> None:
+        from flask import Flask
+        from price_alerts.api_routes import create_price_alerts_blueprint
+
+        repository = InMemoryPriceAlertRepository()
+        play_verifier = StaticPlayVerifier()
+        config = PriceAlertsServerConfig(
+            environment="production",
+            enabled=True,
+            allow_test_entitlements=True,
+        )
+        service = PriceAlertServerService(
+            config=config,
+            repository=repository,
+            play_verifier=play_verifier,
+            token_protector=DeterministicTestTokenProtector(),
+        )
+        app = Flask(__name__)
+        app.register_blueprint(
+            create_price_alerts_blueprint(
+                config=config,
+                server_factory=lambda: service,
+            )
+        )
+        client = app.test_client()
+        registration = client.post(
+            "/v1/installations/register",
+            json={
+                "schemaVersion": 1,
+                "platform": "android",
+                "packageId": "com.northstack.stackwatch",
+                "appVersionName": "1.0.22",
+                "appVersionCode": 23,
+            },
+        )
+        credentials = registration.get_json()
+        headers = {
+            "Authorization": (
+                f"BullionovaInstallation {credentials['installationId']}:"
+                f"{credentials['installationSecret']}"
+            )
+        }
+        now = datetime.now(timezone.utc)
+        repository.entitlements[credentials["installationId"]] = EntitlementState(
+            status="active",
+            verified_until_utc=now + timedelta(hours=1),
+            expires_at_utc=now + timedelta(hours=1),
+            last_verified_at_utc=now,
+        )
+
+        entitlement = client.post(
+            "/v1/entitlements/verify",
+            headers=headers,
+            json={
+                "schemaVersion": 1,
+                "installationId": credentials["installationId"],
+                "packageId": "com.northstack.stackwatch",
+                "productId": "stackwatch_pro",
+                "basePlanId": "monthly",
+                "playPurchaseToken": "fake-play-token-not-logged",
+                "idempotency": {
+                    "key": "verify-entitlement-0001",
+                    "createdAtUtc": "2026-08-12T00:00:00Z",
+                },
+            },
+        )
+
+        self.assertEqual(entitlement.status_code, 200)
+        self.assertEqual(entitlement.get_json()["status"], "active")
+        self.assertEqual(len(play_verifier.calls), 1)
+
     def test_sensitive_portfolio_fields_fail_closed(self) -> None:
         from flask import Flask
         from price_alerts.api_routes import create_price_alerts_blueprint
